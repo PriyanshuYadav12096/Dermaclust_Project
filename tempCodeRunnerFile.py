@@ -1,0 +1,1 @@
+print(train_gen.class_indices)

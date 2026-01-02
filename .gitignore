@@ -1,0 +1,22 @@
+# Python specific
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+env/
+
+# Large files - DO NOT UPLOAD!
+dataset/
+models/
+*.h5
+*.pkl
+
+# IDE files
+.idea/
+.vscode/
+#Why ignore these?
+
+#dataset/ and models/: Your dataset and trained models (.h5 files) are very large. GitHub is for code, not for storing large data files. Repositories with huge files are slow and difficult to manage.
+
+#_ _pycache__ and venv/: These are files and folders that Python or your virtual environment generate automatically. They are not part of your source code and will just clutter the repository.
