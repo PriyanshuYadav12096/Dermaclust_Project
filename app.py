@@ -8,7 +8,7 @@ import cv2
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 # -----------------------------------------------------------------
-# INITIALIZE MEDIAPIPE (New High-Accuracy Tools)
+# INITIALIZE MEDIAPIPE
 # -----------------------------------------------------------------
 mp_face_detection = mp.solutions.face_detection
 face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
@@ -19,6 +19,7 @@ face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1)
 # -----------------------------------------------------------------
 # CONFIGURATION & CONSTANTS
 # -----------------------------------------------------------------
+# NOTE: Verify these match your 'dataset/faceskin' folder order (alphabetical)
 CNN_LABEL_MAP = {
     0: 'acne',
     1: 'dry',
@@ -27,202 +28,204 @@ CNN_LABEL_MAP = {
     4: 'wrinkles' 
 }
 
-CONFIDENCE_THRESHOLD = 40.0
-
 # -----------------------------------------------------------------
-# LOADING ASSETS (Optimized for 8GB RAM)
+# LOADING ASSETS
 # -----------------------------------------------------------------
 @st.cache_resource
 def load_models_and_assets():
-    st.write("Loading AI models... This may take a moment.")
-    
-    # 1. Load CNN Model
     try:
         cnn_model = tf.keras.models.load_model('models/cnn_model.h5')
-    except Exception as e:
-        st.error(f"Error loading cnn_model.h5: {e}")
-        return None, None
-
-    # 2. Load Product Database
-    try:
         df = pd.read_csv("products_with_scores.csv")
-    except FileNotFoundError:
-        st.error("Error: 'products_with_scores.csv' not found. Run precompute_scores.py first.")
+        return cnn_model, df
+    except Exception as e:
+        st.error(f"Error loading assets: {e}")
         return None, None
-    
-    # NOTE: Haar Cascade removed to save memory since we use MediaPipe now
-    st.success("System Ready!")
-    return cnn_model, df
 
 # -----------------------------------------------------------------
-# IMAGE PROCESSING & ZONE EXTRACTION
+# IMAGE PROCESSING FUNCTIONS
 # -----------------------------------------------------------------
 def extract_skin_zones(img_array):
-    """
-    Identifies and crops specific skin zones: Forehead and Cheeks.
-    """
     results = face_mesh.process(img_array)
     if not results.multi_face_landmarks:
         return None
 
     landmarks = results.multi_face_landmarks[0].landmark
     h, w, _ = img_array.shape
+    def get_ptr(idx): return int(landmarks[idx].x * w), int(landmarks[idx].y * h)
 
-    def get_ptr(idx):
-        return int(landmarks[idx].x * w), int(landmarks[idx].y * h)
-
-    # Zone cropping logic (using lowercase keys for consistency)
+    # Extract Forehead, Left Cheek, Right Cheek
     fh_x, fh_y = get_ptr(10)
-    forehead = img_array[max(0, fh_y-50):fh_y+50, max(0, fh_x-50):fh_x+50]
-
     lc_x, lc_y = get_ptr(234)
-    left_cheek = img_array[max(0, lc_y-50):lc_y+50, max(0, lc_x-50):lc_x+50]
-
     rc_x, rc_y = get_ptr(454)
-    right_cheek = img_array[max(0, rc_y-50):rc_y+50, max(0, rc_x-50):rc_x+50]
 
-    return {"forehead": forehead, "left_cheek": left_cheek, "right_cheek": right_cheek}
+    return {
+        "forehead": img_array[max(0, fh_y-50):fh_y+50, max(0, fh_x-50):fh_x+50],
+        "left_cheek": img_array[max(0, lc_y-50):lc_y+50, max(0, lc_x-50):lc_x+50],
+        "right_cheek": img_array[max(0, rc_y-50):rc_y+50, max(0, rc_x-50):rc_x+50]
+    }
 
 def process_and_validate_image(image):
-    """
-    Uses MediaPipe for robust face detection and cropping.
-    """
     img_array = np.array(image.convert('RGB'))
     img_h, img_w, _ = img_array.shape
-    
     results = face_detection.process(img_array)
     
     if not results.detections:
-        return False, "No face detected. Ensure your face is clearly visible.", img_array, None
+        return False, "No face detected.", img_array, None
 
-    detection = results.detections[0]
-    bbox = detection.location_data.relative_bounding_box
-    
-    x = int(bbox.xmin * img_w)
-    y = int(bbox.ymin * img_h)
-    w = int(bbox.width * img_w)
-    h = int(bbox.height * img_h)
+    bbox = results.detections[0].location_data.relative_bounding_box
+    x, y, w, h = int(bbox.xmin * img_w), int(bbox.ymin * img_h), int(bbox.width * img_w), int(bbox.height * img_h)
 
-    # Face proximity validation
-    face_ratio = h / img_h
-    if face_ratio < 0.15:
-        cv2.rectangle(img_array, (x, y), (x + w, y + h), (255, 0, 0), 3)
-        return False, "Move closer to the camera.", img_array, None
-
-    # Success visualization
+    # Draw Green Box for UI
     cv2.rectangle(img_array, (x, y), (x + w, y + h), (0, 255, 0), 3)
-
-    pad_w, pad_h = int(w * 0.2), int(h * 0.2)
-    y1, y2 = max(0, y - pad_h), min(img_h, y + h + pad_h)
-    x1, x2 = max(0, x - pad_w), min(img_w, x + w + pad_w)
     
-    cropped_face = np.array(image.convert('RGB'))[y1:y2, x1:x2]
+    pad_w, pad_h = int(w * 0.2), int(h * 0.2)
+    cropped_face = np.array(image.convert('RGB'))[max(0, y-pad_h):min(img_h, y+h+pad_h), max(0, x-pad_w):min(img_w, x+w+pad_w)]
     
     return True, "Face verified.", img_array, cropped_face
 
-def predict_skin_type(cnn_model, face_image, label_map):
-    img_tensor = tf.convert_to_tensor(face_image, dtype=tf.float32)
+# -----------------------------------------------------------------
+# AI PREDICTION LOGIC
+# -----------------------------------------------------------------
+def enhance_skin_texture(img_array):
+    """
+    Normalizes lighting and enhances skin texture using CLAHE.
+    This helps the AI see 'oil' and 'acne' regardless of lighting conditions.
+    """
+    # Convert to YUV color space (better for lighting correction)
+    img_yuv = cv2.cvtColor(np.array(img_array), cv2.COLOR_RGB2YUV)
+    
+    # Create a CLAHE object (arguments are for clip limit and grid size)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    
+    # Apply CLAHE to the Y channel (the brightness/luma channel)
+    img_yuv[:,:,0] = clahe.apply(img_yuv[:,:,0])
+    
+    # Convert back to RGB
+    img_output = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
+    return img_output
+
+def predict_skin_type(cnn_model, img, label_map):
+    # --- NEW: Enhance the image first ---
+    img_enhanced = enhance_skin_texture(img)
+    
+    img_resized = tf.image.resize(tf.convert_to_tensor(img_enhanced, dtype=tf.float32), (224, 224))
+    img_preprocessed = preprocess_input(img_resized)
+    prediction = cnn_model.predict(np.expand_dims(img_preprocessed, axis=0))[0]
+    
+    idx = np.argmax(prediction)
+    return label_map.get(idx, "Unknown"), prediction[idx] * 100, prediction
+
+def predict_zone_type(cnn_model, zone_image, label_map):
+    """
+    Analyzes a specific patch (forehead or cheek).
+    Uses a higher confidence threshold (65%) to ensure accuracy.
+    """
+    # Apply texture enhancement first
+    zone_enhanced = enhance_skin_texture(zone_image)
+    
+    img_tensor = tf.convert_to_tensor(zone_enhanced, dtype=tf.float32)
     img_resized = tf.image.resize(img_tensor, (224, 224))
     img_preprocessed = preprocess_input(img_resized)
-    img_batch = np.expand_dims(img_preprocessed, axis=0)
     
-    prediction = cnn_model.predict(img_batch)
-    probabilities = prediction[0]
-    predicted_index = np.argmax(probabilities)
-    confidence = probabilities[predicted_index] * 100
+    prediction = cnn_model.predict(np.expand_dims(img_preprocessed, axis=0))[0]
+    predicted_index = np.argmax(prediction)
+    confidence = prediction[predicted_index] * 100
     
-    if confidence < CONFIDENCE_THRESHOLD:
-        return "uncertain", confidence, probabilities
+    # Strict threshold for patches: If AI is less than 65% sure, it's 'uncertain'
+    if confidence < 65.0:
+        return "uncertain", confidence
         
-    return label_map.get(predicted_index, "Unknown"), confidence, probabilities
+    return label_map.get(predicted_index, "Unknown"), confidence
 
-def get_recommendations(product_df, predicted_skin_type):
-    if predicted_skin_type == "uncertain":
-        return pd.DataFrame()
-    score_column = f"score_{predicted_skin_type}"
-    if score_column not in product_df.columns:
-        return pd.DataFrame()
-    recommended_df = product_df[product_df[score_column] > 0.5]
-    return recommended_df.sort_values(by=score_column, ascending=False).head(5)
+def get_recommendations(product_df, skin_type):
+    if skin_type == "combination":
+        # Average Oily and Dry/Normal benefits for a balanced approach
+        product_df['temp_score'] = (product_df['score_oily'] + product_df['score_dry']) / 2
+        target_col = 'temp_score'
+    else:
+        target_col = f"score_{skin_type}"
+    
+    if target_col not in product_df.columns and target_col != 'temp_score':
+        target_col = "score_normal" 
+        
+    # Get products with a decent match
+    recommended = product_df[product_df[target_col] > 0.4].copy()
+    recommended = recommended.sort_values(by=target_col, ascending=False)
+    
+    # Try to provide at least one of each core type for a routine
+    cleanser = recommended[recommended['product_type'].str.contains('Cleanser', case=False, na=False)].head(1)
+    moisturizer = recommended[recommended['product_type'].str.contains('Moisturizer', case=False, na=False)].head(1)
+    treatment = recommended[~recommended['product_type'].str.contains('Cleanser|Moisturizer', case=False, na=False)].head(1)
+    
+    return pd.concat([cleanser, treatment, moisturizer]).head(3)
 
 # -----------------------------------------------------------------
-# MAIN APP (Integrated Tabs & Multi-Zone Display)
+# MAIN INTERFACE
 # -----------------------------------------------------------------
 def main():
     st.set_page_config(page_title="DermaClust AI", layout="centered")
-    st.title("✨ DermaClust: Advanced Skin Analysis")
+    st.title("✨ DermaClust: Professional Skin Analysis")
     
     cnn_model, df = load_models_and_assets()
-    if not all([cnn_model, df is not None]): st.stop()
+    if cnn_model is None or df is None: st.stop()
 
-    # Restoration of Tab Feature
     tab1, tab2 = st.tabs(["📷 Upload Photo", "📸 Use Camera"])
-    image_to_process = None
+    img_input = None
     
     with tab1:
-        uploaded = st.file_uploader("Choose a clear selfie", type=["jpg", "png", "jpeg"])
-        if uploaded: image_to_process = Image.open(uploaded)
-            
+        uploaded = st.file_uploader("Upload selfie", type=["jpg", "png", "jpeg"])
+        if uploaded: img_input = Image.open(uploaded)
     with tab2:
-        camera_photo = st.camera_input("Take a live selfie")
-        if camera_photo: image_to_process = Image.open(camera_photo)
+        camera = st.camera_input("Take selfie")
+        if camera: img_input = Image.open(camera)
 
-    if image_to_process:
-        st.divider()
-        
-        # 1. Verification Step
-        with st.spinner("Analyzing face geometry..."):
-            is_valid, msg, boxed_img, cropped_face = process_and_validate_image(image_to_process)
-        
-        st.image(boxed_img, caption="Verification View", width=450)
+    if img_input:
+        is_valid, msg, boxed_img, face_crop = process_and_validate_image(img_input)
+        st.image(boxed_img, caption="Face Detection Status", width=450)
         
         if not is_valid:
-            st.error(f"⚠️ {msg}")
+            st.error(msg)
         else:
-            # 2. Zone Extraction & Display
-            st.subheader("🔍 Localized Skin Analysis")
-            st.info("Extracting high-detail patches for precise texture assessment.")
-            
-            # Use original clean array for zone extraction
-            clean_array = np.array(image_to_process.convert('RGB'))
-            zones = extract_skin_zones(clean_array)
+            # 1. ZONE ANALYSIS
+            zones = extract_skin_zones(np.array(img_input.convert('RGB')))
+            final_type = "uncertain"
             
             if zones:
-                # Display zones side-by-side using columns
-                col1, col2, col3 = st.columns([1, 1, 1])
-                with col1:
-                    st.image(zones["forehead"], caption="Forehead", use_column_width=True)
-                with col2:
-                    st.image(zones["left_cheek"], caption="Left Cheek", use_column_width=True)
-                with col3:
-                    st.image(zones["right_cheek"], caption="Right Cheek", use_column_width=True)
+                st.subheader("🔍 Localized Analysis")
+                cols = st.columns(3)
+                z_preds = {}
+                for i, (name, patch) in enumerate(zones.items()):
+                    cols[i].image(patch, caption=name.capitalize())
+                    label, conf= predict_zone_type(cnn_model, patch, CNN_LABEL_MAP)
+                    z_preds[name] = label
                 
-                st.success("Zones extracted. Analyzing patterns...")
-            else:
-                st.warning("Could not isolate skin zones. Ensure full face is visible.")
+                # Logic Synthesis
+                fh, lc = z_preds.get("forehead"), z_preds.get("left_cheek")
+                if fh == "oily" and lc == "dry":
+                    final_type = "combination"
+                else:
+                    final_type, confidence, probs = predict_skin_type(cnn_model, face_crop, CNN_LABEL_MAP)
+                    # DEBUG CHART: Shows raw AI probability for each type
+                    st.write("### 📊 AI Confidence Breakdown")
+                    chart_data = pd.DataFrame(probs, index=CNN_LABEL_MAP.values(), columns=["Confidence"])
+                    st.bar_chart(chart_data)
 
-            # 3. Predict & Recommend
-            skin_type, confidence, all_probs = predict_skin_type(cnn_model, cropped_face, CNN_LABEL_MAP)
-            
-            if skin_type != "uncertain":
-                st.metric("Detected Skin Type", skin_type.capitalize(), f"{confidence:.1f}% Confidence")
-                
+            # 2. RECOMMENDATIONS
+            if final_type != "uncertain":
+                st.metric("Detected Profile", final_type.capitalize())
                 st.divider()
-                st.subheader(f"🧴 Top Recommendations for {skin_type.capitalize()}")
-                results = get_recommendations(df, skin_type)
                 
+                # If "combination", we fetch products for "normal" skin as it's the safest balance
+                results = get_recommendations(df, final_type)
+                
+                st.subheader(f"🧴 Top Recommendations for {final_type.capitalize()} Skin")
                 if not results.empty:
                     for _, row in results.iterrows():
-                        with st.container():
-                            st.markdown(f"**{row['product_name']}**")
-                            st.caption(f"{row['product_type']} | ${row['product_price']}")
-                            with st.expander("View Active Ingredients"):
-                                st.write(row['clean_ingreds'])
-                            st.divider()
+                        with st.expander(f"⭐ {row['product_name']}"):
+                            st.write(f"**Type:** {row['product_type']} | **Price:** ${row['product_price']}")
+                            st.caption(f"Ingredients: {row['clean_ingreds']}")
                 else:
-                    st.info("No products matching this skin profile were found.")
-            else:
-                st.warning("Analysis uncertain. Please try again with better lighting.")
+                    st.info("No matching products found in database.")
 
 if __name__ == "__main__":
     main()

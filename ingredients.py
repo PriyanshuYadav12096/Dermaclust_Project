@@ -27,3 +27,16 @@ KEY_INGREDIENTS = {
     'dry': v1_dry_skin_ingredients,
     'oily': v1_oily_ingredients
 }
+# --- RED FLAGS (Add these to ingredients.py) ---
+
+# Ingredients that clog pores (Avoid for Acne/Oily)
+COMEDOGENIC_REAGENTS = [
+    'coconut oil', 'isopropyl myristate', 'isopropyl palmitate', 
+    'lanolin', 'algae extract', 'sodium chloride', 'stearic acid'
+]
+
+# Ingredients that irritate sensitive or dry skin
+POTENTIAL_IRRITANTS = [
+    'denatured alcohol', 'fragrance', 'parfum', 'menthol', 
+    'eucalyptus oil', 'lemon oil', 'sodium lauryl sulfate'
+]
