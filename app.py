@@ -202,7 +202,7 @@ def main():
     st.set_page_config(page_title="DermaClust AI", layout="centered")
     st.title("✨ DermaClust: Professional Skin Analysis")
     
-    cnn_model, df = load_models_and_assets()
+    cnn_model, df,label_map = load_models_and_assets()
     if cnn_model is None or df is None: st.stop()
 
     tab1, tab2 = st.tabs(["📷 Upload Photo", "📸 Use Camera"])
