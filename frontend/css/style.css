@@ -1,0 +1,291 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(135deg, #fdfbfb, #ebedee);
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ================= SCREENS ================= */
+
+.screen {
+  display: none;
+  background: white;
+  padding: 50px;
+  border-radius: 16px;
+  text-align: center;
+  width: 420px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+.screen.active {
+  display: block;
+}
+
+/* ================= COMMON ================= */
+
+.logo {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.tagline {
+  font-size: 15px;
+  color: #666;
+  margin-bottom: 30px;
+}
+
+.primary-btn {
+  background-color: #5c7cfa;
+  color: white;
+  border: none;
+  padding: 14px 28px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.primary-btn:hover {
+  background-color: #4c6ef5;
+}
+
+/* Proper secondary button */
+.secondary-btn {
+  background: transparent;
+  color: #5c7cfa;
+  border: 2px solid #5c7cfa;
+  padding: 14px 28px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.secondary-btn:hover {
+  background: #edf2ff;
+}
+
+/* ================= QUIZ ================= */
+
+.progress {
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 5px;
+  margin-bottom: 25px;
+}
+
+#progressBar {
+  height: 100%;
+  width: 0%;
+  background: #5c7cfa;
+  border-radius: 5px;
+}
+
+.options {
+  margin-top: 20px;
+}
+
+.option {
+  background: #f1f3f5;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: #e7f0ff;
+}
+
+.option.selected {
+  background: #dbe4ff;
+  border: 2px solid #5c7cfa;
+}
+
+.quiz-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+}
+
+/* ================= CHOICE SCREEN ================= */
+
+.choice-title {
+  margin-bottom: 30px;
+  font-size: 22px;
+}
+
+.choice-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.choice-card {
+  padding: 22px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #edf2ff, #e7f0ff);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.choice-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
+.choice-card p {
+  font-size: 14px;
+  color: #555;
+}
+
+.choice-card.skip {
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+/* ================= IMAGE INPUT ================= */
+
+.image-box {
+  width: 220px;
+  height: 220px;
+  border-radius: 14px;
+  border: 2px dashed #adb5bd;
+  margin: 20px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.image-box img,
+.image-box video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+.image-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+  margin-top: 20px;
+}
+
+/* Camera loader */
+.camera-loader {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #555;
+  z-index: 2;
+}
+
+/* ================= ANALYSIS ================= */
+
+.analysis-image-box {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: 20px auto;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.analysis-image-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.overlay {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.4;
+}
+
+.overlay.acne {
+  width: 60px;
+  height: 60px;
+  background: red;
+  top: 60px;
+  left: 50px;
+}
+
+.overlay.pigmentation {
+  width: 70px;
+  height: 70px;
+  background: orange;
+  top: 120px;
+  right: 40px;
+}
+
+.analysis-text {
+  text-align: left;
+  margin: 20px 0;
+  font-size: 14px;
+}
+
+/* ================= RECOMMENDATION ================= */
+
+.product-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin: 25px 0;
+}
+
+.product-card {
+  padding: 18px;
+  border-radius: 12px;
+  background: #f8f9fa;
+  text-align: left;
+}
+
+.product-card h3 {
+  margin-bottom: 6px;
+  font-size: 16px;
+}
+
+.product-card p {
+  font-size: 14px;
+  color: #555;
+}
+
+/* ================= SUMMARY ================= */
+
+.summary-box {
+  text-align: left;
+  background: #f8f9fa;
+  padding: 25px;
+  border-radius: 12px;
+  margin: 20px 0;
+  font-size: 14px;
+}
+
+.summary-box h3 {
+  margin-top: 15px;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.summary-box ul {
+  padding-left: 18px;
+}
+
+.summary-box li {
+  margin-bottom: 6px;
+}

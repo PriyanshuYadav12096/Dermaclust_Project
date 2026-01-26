@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DermaClust</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- LANDING SCREEN -->
+  <div class="screen active" id="landingScreen">
+    <h1 class="logo">DermaClust</h1>
+    <p class="tagline">
+      AI-powered skin analysis & personalized skincare recommendations
+    </p>
+    <button class="primary-btn" onclick="goToQuiz()">Take Skin Quiz</button>
+  </div>
+
+  <!-- QUIZ SCREEN -->
+  <div class="screen" id="quizScreen">
+    <div class="progress">
+      <div id="progressBar"></div>
+    </div>
+
+    <h2 id="questionText"></h2>
+
+    <div class="options" id="optionsContainer"></div>
+
+    <div class="quiz-actions">
+  <button class="secondary-btn" onclick="prevQuestion()">Back</button>
+  <button class="primary-btn" onclick="nextQuestion()">Next</button>
+</div>
+
+  </div>
+
+  <!-- POST QUIZ CHOICE SCREEN -->
+<div class="screen" id="choiceScreen">
+  <h2 class="choice-title">How would you like to continue?</h2>
+
+  <div class="choice-container">
+    <div class="choice-card" onclick="chooseUpload()">
+      <h3>Upload Image</h3>
+      <p>Select a photo from your gallery</p>
+    </div>
+
+    <div class="choice-card" onclick="chooseScan()">
+      <h3>Scan Face</h3>
+      <p>Use camera to scan your face</p>
+    </div>
+
+    <div class="choice-card skip" onclick="skipForNow()">
+      <h3>Skip for now</h3>
+      <p>Get recommendations without image</p>
+    </div>
+  </div>
+</div>
+
+<!-- IMAGE INPUT SCREEN -->
+<div class="screen" id="imageInputScreen">
+  <h2>Provide Your Skin Image</h2>
+
+  <div class="image-box">
+    <div class="camera-loader" id="cameraLoader">
+      Opening camera...
+    </div>
+
+    <video id="camera" autoplay playsinline></video>
+    <canvas id="snapshot" style="display:none"></canvas>
+    <img id="previewImage" alt="Preview will appear here" />
+  </div>
+
+  <div class="image-actions">
+    <!-- Upload Image button -->
+    <button class="primary-btn" id="chooseImageBtn" onclick="triggerUpload()">
+      Choose Image
+    </button>
+
+    <!-- Capture Image button -->
+    <button class="primary-btn" id="captureImageBtn" onclick="captureFromCamera()" style="display:none">
+      Capture Image
+    </button>
+
+    <button class="secondary-btn" id="retakeBtn" onclick="retakePhoto()" style="display:none">
+      Retake
+    </button>
+
+    <button class="primary-btn" id="analyzeBtn" onclick="analyzeImage()" style="display:none">
+      Analyze Skin
+    </button>
+  </div>
+
+  <input 
+    type="file" 
+    id="imageUpload" 
+    accept="image/*" 
+    capture="environment"
+    hidden
+  />
+</div>
+
+<!-- SKIN ANALYSIS PREVIEW SCREEN -->
+<div class="screen" id="analysisScreen">
+  <h2>Skin Analysis Result</h2>
+
+  <div class="analysis-image-box">
+    <img id="analysisImage" />
+    <div class="overlay acne"></div>
+    <div class="overlay pigmentation"></div>
+  </div>
+
+  <div class="analysis-text">
+    <p><strong>Detected Concerns:</strong></p>
+    <ul>
+      <li>Acne (Moderate)</li>
+      <li>Pigmentation (Mild)</li>
+    </ul>
+  </div>
+
+  <button class="primary-btn" onclick="goToRecommendations()">
+    Recommend Products
+  </button>
+</div>
+
+<!-- PRODUCT RECOMMENDATION SCREEN -->
+<div class="screen" id="recommendationScreen">
+  <h2>Recommended Products</h2>
+
+  <div class="product-list">
+    <div class="product-card">
+      <h3>Gentle Cleanser</h3>
+      <p>Helps reduce acne and excess oil</p>
+    </div>
+
+    <div class="product-card">
+      <h3>Niacinamide Serum</h3>
+      <p>Improves pigmentation and skin texture</p>
+    </div>
+
+    <div class="product-card">
+      <h3>Lightweight Moisturizer</h3>
+      <p>Keeps skin hydrated without clogging pores</p>
+    </div>
+  </div>
+
+  <button class="primary-btn" onclick="generateSummary()">
+    Generate Summary
+  </button>
+</div>
+
+<!-- SUMMARY / REPORT SCREEN -->
+<div class="screen" id="summaryScreen">
+  <h2>Skin Analysis Summary</h2>
+
+  <div class="summary-box">
+    <h3>Skin Profile</h3>
+    <ul id="summaryProfile"></ul>
+
+    <h3>Detected Concerns</h3>
+    <ul id="summaryConcerns"></ul>
+
+    <h3>Recommended Products</h3>
+    <ul id="summaryProducts"></ul>
+  </div>
+
+  <button class="primary-btn" onclick="downloadSummary()">
+    Download Summary
+  </button>
+</div>
+
+
+
+  <script src="js/script.js"></script>
+</body>
+</html>
