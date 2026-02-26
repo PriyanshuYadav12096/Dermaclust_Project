@@ -142,68 +142,92 @@ def get_hero_ingredients(ingredient_list, skin_type):
 # import random # Add this to your imports
 
 def get_recommendations(product_df, ai_results, user_quiz, weather_data=None):
-    """
-    ai_results: Dictionary of all probabilities (e.g., {'oily': 0.6, 'wrinkles': 0.3...})
-    """
-    # 1. Identify Primary and Secondary Concerns from AI
+    # 1. Get Primary and Secondary Concerns
     sorted_concerns = sorted(ai_results.items(), key=lambda x: x[1], reverse=True)
-    primary_skin = sorted_concerns[0][0]
-    secondary_skin = sorted_concerns[1][0] if len(sorted_concerns) > 1 else None
-    
-    # 2. Base Scoring for ALL products
-    # Instead of filtering first, we score everything based on the AI's full profile
+    primary_type = sorted_concerns[0][0]
+    secondary_type = sorted_concerns[1][0] if len(sorted_concerns) > 1 else None
+
     matches = product_df.copy()
     matches['final_score'] = 0.0
-    
+
+    # 2. Weighted Base Scoring (Respects the AI probability graph)
     for concern, weight in ai_results.items():
         score_col = f"score_{concern}"
         if score_col in matches.columns:
-            matches['final_score'] += matches[score_col] * weight
+            # We give a slight baseline boost to "normal" so the graph/scores don't hit zero
+            if concern == "normal":
+                matches['final_score'] += matches[score_col] * (weight + 0.1)
+            else:
+                matches['final_score'] += matches[score_col] * weight
 
-    # 3. Apply Weather & Goal Boosts
-    if weather_data:
-        humidity = weather_data.get('humidity', 50)
-        temp = weather_data.get('temp', 25)
-        
-        def apply_boosts(row):
-            boost = 0
-            ings = str(row['clean_ingreds']).lower()
-            # Climate Logic
-            if humidity < 35 and any(h in ings for h in WEATHER_BOOSTERS['humidity_low']): boost += 0.3
-            if humidity > 70 and any(h in ings for h in WEATHER_BOOSTERS['humidity_high']): boost += 0.2
-            if temp > 30 and any(h in ings for h in WEATHER_BOOSTERS['uv_high']): boost += 0.4
-            # Goal Logic
-            goal_map = {"Brightening": "pigmentation", "Acne Control": "acne", "Anti-Aging": "wrinkles"}
-            target_goal = goal_map.get(user_quiz.get('goal'))
-            if target_goal and any(g in ings for g in KEY_INGREDIENTS.get(target_goal, [])):
-                boost += 0.5
-            return boost
+    # 3. CATEGORY ISOLATION LOGIC (Fixes the cross-recommendation issue)
+    def apply_isolation(row):
+        penalty = 0
+        ings = str(row['clean_ingreds']).lower()
+        p_name = str(row['product_name']).lower()
+        # 1. OILY SKIN: Needs weightless hydration, not heavy oils
+    if primary_type == "oily":
+        if any(x in ings for x in ["oil", "butter", "stearic acid"]):
+            penalty -= 1.5  # Demote heavy creams
+        if any(x in ings for x in ["niacinamide", "zinc", "gel"]):
+            penalty += 1.0  # Promote sebum regulators
+            
+    # 2. DRY SKIN: Needs barrier repair, not stripping agents
+        if primary_type == "dry":
+            if any(x in ings for x in ["alcohol denat", "clay", "kaolin"]):
+                penalty -= 2.0  # Demote drying agents
+            if any(x in ings for x in ["ceramide", "hyaluronic", "squalane"]):
+                penalty += 1.2  # Promote moisture magnets
+            
+    # 3. NORMAL SKIN: Balancing the "Zero Score" Issue
+        if primary_type == "normal":
+        # We boost products that are well-rounded and maintain the barrier
+            if any(x in ings for x in ["vitamin", "antioxidant", "panthenol"]):
+                penalty += 0.5
+        # FIX: Wrinkles getting Acne products
+        if primary_type == "wrinkles":
+            # If a product is strictly for acne (salicylic/benzoyl), penalize it for a pure wrinkle profile
+            if any(x in ings for x in ["benzoyl peroxide", "sulfur"]) or "acne" in p_name:
+                penalty -= 2.0 
+            # Boost specific anti-aging markers
+            if any(x in ings for x in ["retinol", "peptide", "matrixyl"]):
+                penalty += 1.0
 
-        matches['final_score'] += matches.apply(apply_boosts, axis=1)
+        # FIX: Acne getting Oily (generic) products
+        if primary_type == "acne":
+            # If it's just a clay mask (oily) but lacks acne actives, give it a lower priority
+            if any(x in ings for x in ["clay", "charcoal"]) and not any(x in ings for x in ["salicylic", "benzoyl"]):
+                penalty -= 0.5
+            # Force boost for actual medication/actives
+            if any(x in ings for x in ["salicylic", "benzoyl", "tea tree"]):
+                penalty += 1.5
 
-    # 4. Filter and SORT
+        return penalty
+
+    matches['final_score'] += matches.apply(apply_isolation, axis=1)
+
+    # 4. Filter for specific product types (Fixing the AM "Treat & Protect" issue)
     matches = matches.sort_values(by='final_score', ascending=False)
-    
-    # 5. VARIETY SAMPLING (Pick from top 5 for each category to ensure uniqueness)
-    def find_best_unique(category_keywords):
-        pattern = '|'.join(category_keywords)
-        candidates = matches[matches['product_type'].str.contains(pattern, case=False, na=False)].head(5)
-        if candidates.empty: return pd.DataFrame()
-        return candidates.sample(1) # Pick ONE randomly from the TOP 5 matches
+
+    def find_step(keywords):
+        pattern = '|'.join(keywords)
+        # We look for the best match that ISN'T penalized
+        res = matches[matches['product_type'].str.contains(pattern, case=False, na=False)].head(1)
+        return res
 
     return {
         "AM": {
-            "Step 1: Cleanse": find_best_unique(['Cleanser', 'Wash']),
-            "Step 2: Treat": find_best_unique(['Serum', 'Toner', 'Essence']),
-            "Step 3: Protect": find_best_unique(['SPF', 'Sunscreen', 'Day Cream'])
+            "Step 1: Cleanse": find_step(['Cleanser', 'Wash', 'Soap']),
+            "Step 2: Treat": find_step(['Serum', 'Toner', 'Essence', 'Treatment']),
+            "Step 3: Protect": find_step(['Sun', 'SPF', 'Day Cream', 'Protect', 'UV'])
         },
         "PM": {
-            "Step 1: Cleanse": find_best_unique(['Cleanser', 'Wash']),
-            "Step 2: Treat": find_best_unique(['Serum', 'Treatment', 'Night']),
-            "Step 3: Hydrate": find_best_unique(['Moisturizer', 'Cream'])
+            "Step 1: Cleanse": find_step(['Cleanser', 'Wash', 'Soap']),
+            "Step 2: Treat": find_step(['Serum', 'Treatment', 'Retinol', 'Night']),
+            "Step 3: Hydrate": find_step(['Moisturizer', 'Cream', 'Hydrat', 'Balm'])
         }
     }
-
+    
 # -----------------------------------------------------------------
 # MAIN INTERFACE
 # -----------------------------------------------------------------
